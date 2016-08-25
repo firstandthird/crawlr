@@ -32,6 +32,8 @@ const crawlPage = function(url, cb) {
           if (rootRef[0] === '/') {
             rootRef = rootRef.substr(1);
           }
+
+          rootRef = rootRef.replace(/\#[A-Za-z\-]+/g, '');
           const nextPage = `${rootUrl}/${rootRef}` // An actual page on this domain
           if (_.indexOf(crawlCache, nextPage) !== -1) {
             return next();
