@@ -18,15 +18,32 @@ const crawlPage = function(url, cb) {
     },
     url
   }, (err, resp, body) => {
+   
     if ( err ) {
       cb(err);
       return;
     }
+    
+    if (resp.statusCode !== 200) {
+      // console.log(`\tStatus Code${resp.statusCode}`);
+      return cb();
+    }
+
+    if(resp.headers['content-type'].indexOf('text/html') === -1) {
+      // console.log('Non HTML Document');
+      return cb();
+    }
+    
     const $ = $ch.load(body);
 
     async.eachLimit($('a'), 5, (elem, next) => {
       const ref = elem.attribs.href;
-      if(ref[0] === '/' || ref.indexOf(rootUrl) !== -1) {
+      
+      if(!ref) {
+        return next();
+      }
+
+      if(ref[0] === '/' || ref.indexOf(rootUrl) !== -1 || ref !== '/') {
         let rootRef = ref.replace(`${rootUrl}/`, '');
         if (rootRef !== '' && rootRef[0] !== '#') {
           if (rootRef[0] === '/') {
