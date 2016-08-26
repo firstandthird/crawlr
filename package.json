@@ -1,12 +1,11 @@
 {
-  "name": "crawllr",
-  "version": "0.0.0",
+  "name": "crawlr",
+  "version": "0.1.0",
   "description": "A crawler plain and simple",
   "main": "crawl.js",
   "scripts": {
-    "test": "test"
   },
-  "author": "Eric Willis",
+  "author": "First+Third",
   "license": "MIT",
   "dependencies": {
     "async": "^2.0.1",
