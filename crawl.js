@@ -94,6 +94,11 @@ const crawlPage = function(url, parentPage, cb) {
     async.eachLimit(anchors, 5, (elem, next) => {
       let ref = elem.attribs.href;
 
+      if (ref === '') {
+        table.push(['E', '', fullUrl]);
+        return next();
+      }
+
       ref = ref.replace(/\/*#+[A-Za-z\-]*$/g, '');
 
       if (!ref) {
