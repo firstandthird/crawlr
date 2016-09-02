@@ -1,30 +1,32 @@
 'use strict';
 
-const argv = require('yargs').argv;
-
-let rootUrl = argv._.pop();
-rootUrl = rootUrl.replace(/\/$/g, '');
 const request = require('request');
-const async = require('async');
 const _ = require('lodash');
 const $ch = require('cheerio');
+const toCsv = require('./lib/outtocsv');
 const Table = require('cli-table');
-
-const output = (argv.output) ? argv.output : 'table';
-
 const table = new Table({
   head: ['Resp', 'URL', 'Parent'],
   colWidths: [8, 50, 50]
 });
 
+const argv = require('yargs').argv;
+
+let rootUrl = argv._.pop();
+rootUrl = rootUrl.replace(/\/$/g, '');
+
+const output = (argv.output) ? argv.output : 'table';
+const throttle = (argv.throttle) ? argv.throttle : 100;
+
 let reqCount = 0;
+let emptyCount = 0;
+const crawlQueue = [];
 const crawlCache = [];
 const externalCrawlCache = [];
 
-
-const crawlExternal = function(url, parentPage, done) {
+const crawlExternal = function(url, parentPage) {
   if (_.indexOf(externalCrawlCache, url) !== -1) {
-    return done();
+    return;
   }
 
   externalCrawlCache.push(url);
@@ -39,28 +41,26 @@ const crawlExternal = function(url, parentPage, done) {
     if (err) {
       // Guessing non existant site. Log but don't err.
       table.push(['D', url, parentPage]);
-      return done();
+      return;
     }
 
     if (resp.statusCode !== 200) {
       table.push([resp.statusCode, url, parentPage]);
     }
-
-    done();
   });
 };
 
 
-const crawlPage = function(url, parentPage, cb) {
+const crawlPage = function(url, parentPage) {
   const fullUrl = `${rootUrl}${url}`;
-  crawlCache.push(url);
+  // console.log(`Crawling ${url}`);
 
   const logUrl = (argv.host === false) ? url : fullUrl;
 
   reqCount++;
   if (reqCount > 5000) {
     // Failsafe to prevent runnaway scripts
-    return cb(`REQUEST COUNT ${reqCount} EXCEDED!`);
+    return console.log(`REQUEST COUNT ${reqCount} EXCEDED!`);
   }
 
   request({
@@ -70,44 +70,46 @@ const crawlPage = function(url, parentPage, cb) {
     url: fullUrl
   }, (err, resp, body) => {
     if (err) {
-      cb(err);
+      // Error that should not happen.
       return;
     }
 
     if (resp.statusCode !== 200) {
       // console.log(`\tStatus Code${resp.statusCode}`);
       table.push([resp.statusCode, logUrl, parentPage]);
-      return cb();
+      return;
     }
 
     table.push(['', logUrl, '']);
 
     if (resp.headers['content-type'].indexOf('text/html') === -1) {
       // console.log('Non HTML Document');
-      return cb();
+      return;
     }
 
     const $ = $ch.load(body);
 
     const anchors = $('a');
 
-    async.eachLimit(anchors, 5, (elem, next) => {
+    _.each(anchors, (elem) => {
       let ref = elem.attribs.href;
 
-      if (ref === '') {
+      // console.log(`\tFound link with href of: ${ref}`);
+
+      if (!ref) {
         table.push(['E', '', fullUrl]);
-        return next();
+        return;
       }
 
       ref = ref.replace(/\/*#+[A-Za-z\-]*$/g, '');
 
       if (!ref) {
-        return next();
+        return;
       }
 
       // Filter out mail and tel links.
       if (ref.match(/^(mailto|tel)/gi)) {
-        return next();
+        return;
       }
 
       if ((ref[0] === '/' || ref.indexOf(rootUrl) !== -1) && ref !== '/') {
@@ -119,39 +121,51 @@ const crawlPage = function(url, parentPage, cb) {
           }
 
           const nextPage = `/${rootRef}`; // An actual page on this domain
-          if (_.indexOf(crawlCache, nextPage) !== -1) {
-            return next();
-          }
 
-          return crawlPage(nextPage, fullUrl, next);
+          if (_.indexOf(crawlCache, nextPage) !== -1) {
+            // console.log(`\t\t${nextPage} is already in crawlCache`);
+            return;
+          }
+          // console.log(`\t\tAdding ${nextPage} to queue`);
+
+          crawlCache.push(nextPage);
+          crawlQueue.push(nextPage);
         }
 
-        return next();
+        return;
       }
 
-      return crawlExternal(ref, fullUrl, next);
-    }, cb);
+      return crawlExternal(ref, fullUrl);
+    });
   });
 };
 
-crawlPage('/', null, (err) => {
-  if (err) {
-    console.log(err);
+
+// Initialize
+crawlQueue.push('/');
+crawlCache.push('/');
+
+const crawlInt = setInterval(() => {
+  const url = crawlQueue.shift();
+  if (url) {
+    crawlPage(url);
   }
 
-  if (output === 'table') {
-    return console.log(table.toString());
-  }
+  if (crawlQueue.length === 0 && emptyCount === 25) {
+    // Must be done then?
+    if (output === 'csv') {
+      console.log(toCsv(table));
+    }
 
-  if (output === 'csv') {
-    // Lightweight CSV Output
-    console.log('Resp, Url, Parent');
-    _.each(table, (row) => {
-      console.log(row.join(', '));
-    });
+    if (output === 'table') {
+      console.log(table.toString());
+    }
 
+    clearInterval(crawlInt);
     return;
   }
 
-  console.log('BAD OUTPUT ARG');
-});
+  if (crawlQueue.length === 0) {
+    emptyCount++;
+  }
+}, throttle);
