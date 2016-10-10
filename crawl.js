@@ -4,18 +4,13 @@ const request = require('request');
 const _ = require('lodash');
 const $ch = require('cheerio');
 const toCsv = require('./lib/outtocsv');
-const Table = require('cli-table');
-const table = new Table({
-  head: ['Resp', 'URL', 'Parent'],
-  colWidths: [8, 50, 50]
-});
+const table = [];
 
 const argv = require('yargs').argv;
 
 let rootUrl = argv._.pop();
 rootUrl = rootUrl.replace(/\/$/g, '');
 
-const output = (argv.output) ? argv.output : 'table';
 const throttle = (argv.throttle) ? argv.throttle : 100;
 
 let reqCount = 0;
@@ -40,12 +35,12 @@ const crawlExternal = function(url, parentPage) {
   }, (err, resp) => {
     if (err) {
       // Guessing non existant site. Log but don't err.
-      table.push(['D', url, parentPage]);
+      table.push([url, parentPage, '<error>']);
       return;
     }
 
     if (resp.statusCode !== 200) {
-      table.push([resp.statusCode, url, parentPage]);
+      table.push([url, parentPage, resp.statusCode]);
     }
   });
 };
@@ -53,9 +48,8 @@ const crawlExternal = function(url, parentPage) {
 
 const crawlPage = function(url, parentPage) {
   const fullUrl = `${rootUrl}${url}`;
-  // console.log(`Crawling ${url}`);
-
-  const logUrl = (argv.host === false) ? url : fullUrl;
+  // const logUrl = (argv.host === false) ? url : fullUrl;
+  const logUrl = url;
 
   reqCount++;
   if (reqCount > 5000) {
@@ -76,11 +70,11 @@ const crawlPage = function(url, parentPage) {
 
     if (resp.statusCode !== 200) {
       // console.log(`\tStatus Code${resp.statusCode}`);
-      table.push([resp.statusCode, logUrl, parentPage]);
+      table.push([logUrl, parentPage, resp.statusCode]);
       return;
     }
 
-    table.push(['', logUrl, '']);
+    table.push([logUrl, '', '200']);
 
     if (resp.headers['content-type'].indexOf('text/html') === -1) {
       // console.log('Non HTML Document');
@@ -97,7 +91,7 @@ const crawlPage = function(url, parentPage) {
       // console.log(`\tFound link with href of: ${ref}`);
 
       if (!ref) {
-        table.push(['E', '', fullUrl]);
+        table.push(['<empty>', fullUrl, '']);
         return;
       }
 
@@ -152,14 +146,7 @@ const crawlInt = setInterval(() => {
   }
 
   if (crawlQueue.length === 0 && emptyCount === 25) {
-    // Must be done then?
-    if (output === 'csv') {
-      console.log(toCsv(table));
-    }
-
-    if (output === 'table') {
-      console.log(table.toString());
-    }
+    console.log(toCsv(table));
 
     clearInterval(crawlInt);
     return;

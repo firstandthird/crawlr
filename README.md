@@ -6,8 +6,6 @@ Will only capture URL's for the domain above... no similarity subdomains (like w
 
 ## Options
 
-`--output [type]` formats the output display. Two types available, *table*, and *csv*
-
 `--no-host` Removes the "Host" from the list of links (Except for parent, and external links)
 
 ###Docker Usage
