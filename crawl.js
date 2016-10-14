@@ -2,11 +2,13 @@
 
 const request = require('request');
 const _ = require('lodash');
-const $ch = require('cheerio');
 const toCsv = require('./lib/outtocsv');
 const table = [];
 
 const argv = require('yargs').argv;
+
+const matchRegexp = /<a[A-Za-z=\s"]+href="([\w\.\-_\/\?:]+)"[A-Za-z=\s"]*>/ig;
+
 
 let rootUrl = argv._.pop();
 rootUrl = rootUrl.replace(/\/$/g, '');
@@ -81,34 +83,30 @@ const crawlPage = function(url, parentPage) {
       return;
     }
 
-    const $ = $ch.load(body);
+    const bodyString = body.toString();
 
-    const anchors = $('a');
-
-    _.each(anchors, (elem) => {
-      let ref = elem.attribs.href;
-
-      // console.log(`\tFound link with href of: ${ref}`);
+    let matches;
+    while ((matches = matchRegexp.exec(bodyString)) !== null) {
+      let ref = matches[1];
 
       if (!ref) {
         table.push(['<empty>', fullUrl, '']);
-        return;
+        continue;
       }
 
       ref = ref.replace(/\/*#+[A-Za-z\-]*$/g, '');
 
       if (!ref) {
-        return;
+        continue;
       }
 
       // Filter out mail and tel links.
       if (ref.match(/^(mailto|tel)/gi)) {
-        return;
+        continue;
       }
 
       if ((ref[0] === '/' || ref.indexOf(rootUrl) !== -1) && ref !== '/') {
         let rootRef = ref.replace(`${rootUrl}`, '');
-
         if (rootRef !== '') {
           if (rootRef[0] === '/') {
             rootRef = rootRef.substr(1);
@@ -117,20 +115,16 @@ const crawlPage = function(url, parentPage) {
           const nextPage = `/${rootRef}`; // An actual page on this domain
 
           if (_.indexOf(crawlCache, nextPage) !== -1) {
-            // console.log(`\t\t${nextPage} is already in crawlCache`);
-            return;
+            continue;
           }
-          // console.log(`\t\tAdding ${nextPage} to queue`);
-
           crawlCache.push(nextPage);
           crawlQueue.push(nextPage);
         }
-
-        return;
+        continue;
       }
 
-      return crawlExternal(ref, fullUrl);
-    });
+      crawlExternal(ref, fullUrl);
+    }
   });
 };
 
